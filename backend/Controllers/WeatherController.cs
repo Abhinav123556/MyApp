@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MyApp.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("[controller]")]
 public class WeatherController : ControllerBase
 {
     private static readonly string[] Summaries = new[]
@@ -11,18 +11,9 @@ public class WeatherController : ControllerBase
         "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
     };
 
-    private readonly ILogger<WeatherController> _logger;
-
-    public WeatherController(ILogger<WeatherController> logger)
-    {
-        _logger = logger;
-    }
-
     [HttpGet]
-    public IActionResult GetWeatherForecast()
+    public IActionResult Get()
     {
-        _logger.LogInformation("Getting weather forecast");
-        
         var forecast = Enumerable.Range(1, 5).Select(index => new WeatherForecast
         {
             Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
