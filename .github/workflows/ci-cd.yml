@@ -50,7 +50,7 @@ jobs:
     - name: Install Angular CLI and dependencies
       run: |
         npm install -g @angular/cli@21.0.3
-        npm ci
+        npm install --legacy-peer-deps
       working-directory: ./frontend
 
     # Step 8: Build Angular 21 project
