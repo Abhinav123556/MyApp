@@ -8,14 +8,14 @@ on:
 
 env:
   DOTNET_VERSION: '10.0.101'
-  NODE_VERSION: '25.2.1'
+  NODE_VERSION: '20.19.6'
 
 jobs:
   build-and-test:
     runs-on: windows-latest
     
     steps:
-    # Step 1: Get code from GitHub
+    # Step 1: Checkout repository
     - name: Checkout repository
       uses: actions/checkout@v4
 
@@ -25,62 +25,60 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    # Step 3: Setup Node.js 25.2.1
-    - name: Setup Node.js 25.2.1
+    # Step 3: Setup Node.js 20 LTS (Angular-supported)
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
 
-    # Step 4: Restore .NET dependencies (using csproj)
+    # Step 4: Restore .NET dependencies
     - name: Restore .NET dependencies
       run: dotnet restore ./backend/MyApp.API.csproj
 
-    # Step 5: Build .NET 10 project
-    - name: Build .NET 10 project
+    # Step 5: Build .NET project
+    - name: Build .NET project
       run: dotnet build ./backend/MyApp.API.csproj --configuration Release --no-restore
 
     # Step 6: Run .NET tests
     - name: Run .NET tests
-      run: dotnet test ./backend/MyApp.API.csproj --configuration Release --no-build --verbosity normal
-      continue-on-error: true  # Remove this if you have actual tests
+      run: dotnet test ./backend/MyApp.API.csproj --configuration Release --no-build
+      continue-on-error: true
 
-    # Step 7: Install Angular CLI and dependencies
-    - name: Install Angular CLI and dependencies
-      run: |
-        npm install -g @angular/cli@21.0.3
-        npm install --legacy-peer-deps
+    # Step 7: Install Angular CLI
+    - name: Install Angular CLI
+      run: npm install -g @angular/cli@21.0.3
+
+    # Step 8: Install Angular dependencies (SAFE)
+    - name: Install Angular dependencies
+      run: npm ci
       working-directory: ./frontend
 
-    # Step 8: Build Angular 21 project
-    - name: Build Angular 21 project
+    # Step 9: Build Angular 21 project
+    - name: Build Angular project
       run: ng build --configuration=production
       working-directory: ./frontend
 
-    # Step 9: Run Angular tests
+    # Step 10: Run Angular tests
     - name: Run Angular tests
       run: ng test --watch=false --browsers=ChromeHeadless
       working-directory: ./frontend
-      continue-on-error: true  # Remove this if you have actual tests
+      continue-on-error: true
 
-    # Step 10: Create deployment artifacts
+    # Step 11: Create deployment artifacts
     - name: Create deployment artifacts
       run: |
-        # Create directories
-        mkdir -p artifacts/wwwroot
-        
-        # Publish .NET 10 backend
+        mkdir artifacts
+        mkdir artifacts/wwwroot
+
         dotnet publish ./backend/MyApp.API.csproj `
           --configuration Release `
           --output ./artifacts `
-          --no-restore `
-          --verbosity normal
-        
-        # Copy Angular build output
-        Copy-Item -Path "frontend/dist/frontend/*" -Destination "artifacts/wwwroot/" -Recurse -Force
-        
-        # Create deployment info file
+          --no-restore
+
+        Copy-Item -Path "frontend/dist/**" -Destination "artifacts/wwwroot/" -Recurse -Force
+
         @"
         DEPLOYMENT PACKAGE
         =================
@@ -89,126 +87,13 @@ jobs:
         .NET Version: ${{ env.DOTNET_VERSION }}
         Node.js Version: ${{ env.NODE_VERSION }}
         Angular CLI: 21.0.3
-        Workflow: ${{ github.workflow }}
         Commit: ${{ github.sha }}
-        
-        CONTENTS:
-        - Backend: .NET 10 API
-        - Frontend: Angular 21 App
-        - Static files in wwwroot/
-        " | Out-File -FilePath artifacts/deployment-info.txt -Encoding UTF8
+        "@ | Out-File artifacts/deployment-info.txt -Encoding UTF8
 
-    # Step 11: Upload artifacts
+    # Step 12: Upload artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: myapp-build-${{ github.run_number }}
         path: artifacts/
         retention-days: 7
-
-  deploy-demo:
-    needs: build-and-test
-    if: github.ref == 'refs/heads/main'
-    runs-on: windows-latest
-    
-    steps:
-    # Step 1: Download artifacts
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: myapp-build-${{ github.run_number }}
-        path: ./deploy-package
-
-    # Step 2: Create deployment ZIP
-    - name: Create deployment package
-      run: |
-        # Create timestamp for unique filename
-        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-        $zipName = "myapp-deploy-$timestamp.zip"
-        
-        # Create ZIP with all files
-        Compress-Archive -Path "./deploy-package/*" -DestinationPath $zipName -Force
-        
-        # Display package info
-        Write-Host "========================================="
-        Write-Host "✅ DEPLOYMENT PACKAGE CREATED SUCCESSFULLY"
-        Write-Host "========================================="
-        Write-Host "Package Name: $zipName"
-        Write-Host "Size: $([math]::Round((Get-Item $zipName).Length/1MB, 2)) MB"
-        Write-Host "Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-        Write-Host ""
-        Write-Host "📦 CONTENTS:"
-        Get-ChildItem -Path ./deploy-package -Recurse | 
-          Select-Object -First 20 | 
-          ForEach-Object { 
-            $relativePath = $_.FullName.Substring((Resolve-Path ./deploy-package).Path.Length + 1)
-            Write-Host "  - $relativePath" 
-          }
-        
-        # Create deployment instructions
-        @"
-        DEPLOYMENT INSTRUCTIONS
-        =======================
-        
-        APPLICATION: MyApp (.NET 10 + Angular 21)
-        DEPLOYMENT PACKAGE: $zipName
-        WORKFLOW RUN: #${{ github.run_number }}
-        COMMIT: ${{ github.sha }}
-        DATE: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-        
-        PREREQUISITES:
-        1. Windows Server with .NET 10 Runtime installed
-        2. IIS (optional) for web hosting
-        
-        DEPLOYMENT STEPS:
-        1. Download '$zipName' from GitHub Actions Artifacts
-        2. Extract to your server (e.g., C:\inetpub\wwwroot\MyApp)
-        3. Open Command Prompt as Administrator
-        4. Navigate to extracted folder
-        5. Run: dotnet MyApp.API.dll
-        
-        APPLICATION URLs:
-        - Frontend: http://localhost:5000
-        - Backend API: http://localhost:5000/api/weather
-        - Swagger Docs: http://localhost:5000/swagger
-        
-        TROUBLESHOOTING:
-        - If port 5000 is busy, edit appsettings.json
-        - Check logs in: logs\ folder
-        - Ensure .NET 10 Runtime is installed
-        
-        SUPPORT:
-        - GitHub Repo: https://github.com/${{ github.repository }}
-        - Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        " | Out-File -FilePath deployment-instructions.txt -Encoding UTF8
-
-    # Step 3: Upload deployment package
-    - name: Upload deployment package
-      uses: actions/upload-artifact@v4
-      with:
-        name: deployment-package-${{ github.run_number }}
-        path: |
-          *.zip
-          deployment-instructions.txt
-        retention-days: 30
-
-    # Step 4: Success notification
-    - name: Display success message
-      run: |
-        Write-Host ""
-        Write-Host "🎉 CI/CD PIPELINE COMPLETED SUCCESSFULLY!"
-        Write-Host "=========================================="
-        Write-Host ""
-        Write-Host "📊 SUMMARY:"
-        Write-Host "  - Backend: .NET 10.0.101 ✓"
-        Write-Host "  - Frontend: Angular 21 ✓"
-        Write-Host "  - Node.js: 25.2.1 ✓"
-        Write-Host "  - Tests: Passed ✓"
-        Write-Host "  - Deployment Package: Created ✓"
-        Write-Host ""
-        Write-Host "🚀 NEXT STEPS:"
-        Write-Host "  1. Go to GitHub Actions tab"
-        Write-Host "  2. Download 'deployment-package' artifact"
-        Write-Host "  3. Extract and deploy to your server"
-        Write-Host ""
-        Write-Host "📞 For help, check deployment-instructions.txt"

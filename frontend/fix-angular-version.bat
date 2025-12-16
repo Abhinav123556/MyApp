@@ -29,7 +29,7 @@ echo     "@angular/platform-browser-dynamic": "^21.0.0",
 echo     "@angular/router": "^21.0.0",
 echo     "rxjs": "^7.8.0",
 echo     "tslib": "^2.6.0",
-echo     "zone.js": "~0.14.0"
+echo     "zone.js": "~0.15.0"
 echo   },
 echo   "devDependencies": {
 echo     "@angular-devkit/build-angular": "^21.0.3",

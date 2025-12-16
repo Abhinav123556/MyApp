@@ -26,7 +26,7 @@ echo     branches: [ main ]
 echo.
 echo env:
 echo   DOTNET_VERSION: '10.0.101'
-echo   NODE_VERSION: '25.2.1'
+echo   NODE_VERSION: '20.19.6'
 echo.
 echo jobs:
 echo   build-and-test:
@@ -40,7 +40,7 @@ echo       uses: actions/setup-dotnet@v4
 echo       with:
 echo         dotnet-version: ${{ env.DOTNET_VERSION }}
 echo.
-echo     - name: Setup Node.js 25.2.1
+echo     - name: Setup Node.js 20.19.6
 echo       uses: actions/setup-node@v4
 echo       with:
 echo         node-version: ${{ env.NODE_VERSION }}
@@ -88,7 +88,7 @@ echo Next Steps:
 echo 1. Copy the complete code from above into the files
 echo 2. Install tools:
 echo    - .NET 10 SDK
-echo    - Node.js 25.2.1
+echo    - Node.js 20.19.6
 echo    - Angular CLI 21.0.3
 echo 3. Run: git init
 echo 4. Run: git add .

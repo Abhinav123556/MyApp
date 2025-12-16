@@ -1,30 +1,37 @@
 import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 
 @Component({
   selector: 'app-root',
-  template: `
-    <div style="padding: 20px;">
-      <h1>MyApp - CI/CD Demo</h1>
-      <p>Built with Angular 21 + .NET 10</p>
-      
-      <div *ngIf="weatherData">
-        <h3>Weather Forecast:</h3>
-        <div *ngFor="let forecast of weatherData">
-          <p>{{forecast.date}} - {{forecast.summary}} - {{forecast.temperatureC}}°C</p>
-        </div>
-      </div>
-    </div>
-  `
+  templateUrl: './app.component.html'
 })
 export class AppComponent implements OnInit {
+  myForm: FormGroup;
   weatherData: any;
 
-  constructor(private http: HttpClient) {}
+  constructor(private fb: FormBuilder, private http: HttpClient) {
+    this.myForm = this.fb.group({
+      city: ['']
+    });
+  }
 
   ngOnInit() {
-    this.http.get('/weather').subscribe(data => {
+    // Example API call
+    this.http.get<any>('/weather').subscribe((data: any) => {
       this.weatherData = data;
+      console.log('Weather data:', data);
+    });
+  }
+
+  submitForm() {
+    const city = this.myForm.value.city;
+    console.log('Form submitted. City:', city);
+
+    // Example: fetch weather for entered city
+    this.http.get<any>(`/weather?city=${city}`).subscribe((data: any) => {
+      this.weatherData = data;
+      console.log('Weather data for city:', data);
     });
   }
 }
