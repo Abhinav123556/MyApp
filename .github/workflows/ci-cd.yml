@@ -1,0 +1,150 @@
+name: .NET 10 & Angular 21 CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '10.0.101'
+  NODE_VERSION: '25.2.1'
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Setup Node.js 25.2.1
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    # Backend Steps
+    - name: Restore .NET dependencies
+      run: dotnet restore ./backend/MyApp.API.sln
+      working-directory: .
+
+    - name: Build .NET 10 project
+      run: dotnet build ./backend/MyApp.API.sln --configuration Release --no-restore
+      working-directory: .
+
+    - name: Run .NET tests
+      run: dotnet test ./backend/MyApp.API.sln --configuration Release --no-build --verbosity normal
+      working-directory: .
+
+    # Frontend Steps
+    - name: Install Angular CLI and dependencies
+      run: |
+        npm install -g @angular/cli@21.0.3
+        npm ci
+      working-directory: ./frontend
+
+    - name: Build Angular 21 project
+      run: ng build --configuration=production
+      working-directory: ./frontend
+
+    - name: Run Angular tests
+      run: ng test --watch=false --browsers=ChromeHeadless
+      working-directory: ./frontend
+
+    # Create artifacts
+    - name: Create deployment artifacts
+      run: |
+        # Create directories
+        mkdir -p artifacts/wwwroot
+        
+        # Publish .NET 10 backend
+        dotnet publish ./backend/MyApp.API/MyApp.API.csproj `
+          --configuration Release `
+          --output ./artifacts `
+          --no-restore `
+          --verbosity normal
+        
+        # Copy Angular build output
+        Copy-Item -Path "frontend/dist/frontend/*" -Destination "artifacts/wwwroot/" -Recurse -Force
+        
+        # Create deployment manifest
+        @"
+        Deployment Package
+        =================
+        Created: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        .NET Version: ${{ env.DOTNET_VERSION }}
+        Node.js Version: ${{ env.NODE_VERSION }}
+        Angular CLI: 21.0.3
+        " > artifacts/deployment-info.txt
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: myapp-build-${{ github.run_number }}
+        path: artifacts/
+        retention-days: 7
+
+  deploy-demo:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: myapp-build-${{ github.run_number }}
+        path: ./deploy
+
+    - name: Create deployment package
+      run: |
+        # Create timestamp for unique filename
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $zipName = "myapp-deploy-$timestamp.zip"
+        
+        # Create ZIP
+        Compress-Archive -Path "./deploy/*" -DestinationPath $zipName -Force
+        
+        # Display package info
+        Write-Host "========================================="
+        Write-Host "✅ DEPLOYMENT PACKAGE CREATED SUCCESSFULLY"
+        Write-Host "========================================="
+        Write-Host "Package: $zipName"
+        Write-Host "Size: $([math]::Round((Get-Item $zipName).Length/1MB, 2)) MB"
+        Write-Host ""
+        Write-Host "📦 ARTIFACTS INCLUDED:"
+        Get-ChildItem -Path ./deploy -Recurse | 
+          ForEach-Object { Write-Host "  - $($_.FullName.Substring($pwd.Path.Length + 1))" }
+        
+        # Save package info
+        @"
+        Deployment Successful!
+        =====================
+        Workflow: ${{ github.workflow }}
+        Run Number: ${{ github.run_number }}
+        Commit: ${{ github.sha }}
+        Package: $zipName
+        Date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        
+        NEXT STEPS:
+        1. Download $zipName from GitHub Actions artifacts
+        2. Extract to your Windows server
+        3. Run: dotnet MyApp.API.dll
+        4. Access at: http://localhost:5000
+        " > deployment-instructions.txt
+
+    - name: Upload deployment package
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-package
+        path: |
+          *.zip
+          deployment-instructions.txt
+        retention-days: 30
